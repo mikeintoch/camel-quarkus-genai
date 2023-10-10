@@ -12,12 +12,15 @@ public class BotRoute extends RouteBuilder {
     @Override
     public void configure() throws Exception {
 
-        from("telegram:bots")
-                .log("Message Received: ${body}")
-                .to("direct:transform");
+        from("netty-http:http://0.0.0.0:8080/camel")
+        .log("webhook message : ${body}")
+        .to("direct:transform");
+
+        from("webhook:telegram:bots")
+                .log("Telegram Received: ${body}");
 
         from("direct:transform")
-                .transform().jsonpath("$.text")
+                .transform().jsonpath("$.message.text")
                 .bean(this, "transformMessage")
                 .marshal().json()
                 .log("Message Transformed: ${body}")
@@ -28,13 +31,14 @@ public class BotRoute extends RouteBuilder {
                 .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
                 .setHeader("Accept", constant("application/json"))
                 .setHeader("CamelHttpQuery", simple("key={{genai.api-key}}"))
-        .to("https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText")
+                //.removeHeader(Exchange.HTTP_PATH)
+        .to("https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?bridgeEndpoint=true")
         .log("GenAI Response: ${body}")
         .to("direct:toTelegram");
 
         from("direct:toTelegram")
                 .transform().jsonpath("$.candidates[0].output")
-        .to("telegram:bots");
+        .to("telegram:bots?chatId={{telegram.chatId}}");
     }
 
     public void transformMessage(Exchange exchange) {
